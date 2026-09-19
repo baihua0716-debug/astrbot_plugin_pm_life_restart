@@ -30,7 +30,7 @@ PLUGIN_NAME = "astrbot_plugin_pm_life_restart"
     PLUGIN_NAME,
     "baihua0716-debug",
     "在 QQ 群聊或私聊中游玩独立存档的月计人生重开模拟器。",
-    "0.1.2",
+    "0.1.3",
     "https://github.com/baihua0716-debug/astrbot_plugin_pm_life_restart",
 )
 class Main(Star):
@@ -53,7 +53,7 @@ class Main(Star):
             "forward_chunk_chars", 2500, 500, 10000
         )
         self._user_locks: dict[tuple[str, str], asyncio.Lock] = {}
-        logger.info("月计人生插件 v0.1.2 已加载，指令：/月计人生")
+        logger.info("月计人生插件 v0.1.3 已加载，指令：/月计人生")
 
     @filter.command("月计人生", alias={"pmlife", "pm人生"})
     @filter.event_message_type(filter.EventMessageType.ALL)
@@ -62,7 +62,6 @@ class Main(Star):
         if getattr(event, "_pm_life_handled", False):
             return
         setattr(event, "_pm_life_handled", True)
-        event.stop_event()
         user_id = event.get_sender_id()
         if not user_id:
             yield event.plain_result("无法识别当前 QQ 用户，暂时不能建立存档。")
@@ -120,7 +119,6 @@ class Main(Star):
                                 run["summary"], run["seed"], run.get("details")
                             )
                         )
-                        event.stop_event()
                         yield self._forward_result(event, run["trajectory"])
                 elif action in {"放弃", "取消", "cancel"}:
                     await asyncio.to_thread(
@@ -135,15 +133,11 @@ class Main(Star):
                     yield await self._choose_talents(group_key, user_key, rest, event)
                 elif action in {"属性", "property", "prop"}:
                     yield event.plain_result("⏳ 正在推演完整人生，请稍候……")
-                    event.stop_event()
                     results = await self._simulate(group_key, user_key, rest)
                     yield event.plain_result(results["summary_text"])
-                    event.stop_event()
                     yield self._forward_result(event, results["trajectory"])
-                    event.stop_event()
                     if results["achievement_text"]:
                         yield event.plain_result(results["achievement_text"])
-                        event.stop_event()
                     yield event.plain_result(results["inherit_text"])
                 elif not action or action in {"开始", "重开", "start", "restart"}:
                     force = bool(action)
@@ -206,10 +200,10 @@ class Main(Star):
         if skip and phase != "inherit":
             return
 
-        event.stop_event()
         lock = self._user_locks.setdefault((group_key, user_key), asyncio.Lock())
         if lock.locked():
             yield event.plain_result("你的上一项操作仍在处理中，请稍候。")
+            event.stop_event()
             return
 
         async with lock:
