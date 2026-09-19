@@ -1,0 +1,9 @@
+{
+  "name": "astrbot-pm-life-engine",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.data/
+node_modules/
+.upstream-pm-life-restart/

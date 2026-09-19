@@ -1,0 +1,23 @@
+{
+  "node_path": {
+    "description": "Node.js 可执行文件路径",
+    "type": "string",
+    "default": "node",
+    "hint": "需要 Node.js 20 或更高版本"
+  },
+  "engine_timeout": {
+    "description": "单次游戏引擎请求超时（秒）",
+    "type": "int",
+    "default": 20
+  },
+  "history_limit": {
+    "description": "每个群内用户保留的完整人生记录数",
+    "type": "int",
+    "default": 10
+  },
+  "forward_chunk_chars": {
+    "description": "合并转发中单个节点的最大字符数",
+    "type": "int",
+    "default": 2500
+  }
+}
