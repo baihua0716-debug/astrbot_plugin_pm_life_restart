@@ -9,6 +9,16 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
+def build_scope_key(
+    platform: str | None, group_id: str | None, user_id: str
+) -> str:
+    """Build a stable save scope while preserving existing group save keys."""
+    platform_key = str(platform or "qq")
+    if group_id:
+        return f"{platform_key}:{group_id}"
+    return f"{platform_key}:private:{user_id}"
+
+
 def _dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -125,6 +135,14 @@ class SQLiteStore:
                 "DELETE FROM sessions WHERE group_id=? AND user_id=?",
                 (group_id, user_id),
             )
+
+    def delete_user_data(self, group_id: str, user_id: str) -> None:
+        """Delete one user's profile, pending session, and run history in a scope."""
+        with self._lock, self._connection() as db:
+            owner = (group_id, user_id)
+            db.execute("DELETE FROM runs WHERE group_id=? AND user_id=?", owner)
+            db.execute("DELETE FROM sessions WHERE group_id=? AND user_id=?", owner)
+            db.execute("DELETE FROM profiles WHERE group_id=? AND user_id=?", owner)
 
     def save_profile_and_session(
         self,

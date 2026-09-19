@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from pm_life.formatting import chunk_trajectory, profile_counts
-from pm_life.storage import SQLiteStore
+from pm_life.storage import SQLiteStore, build_scope_key
 
 
 class StorageTests(unittest.TestCase):
@@ -28,9 +28,22 @@ class StorageTests(unittest.TestCase):
                 json.loads(store.get_profile("qq:group-a", "user")["times"]), 3
             )
             self.assertEqual(store.get_profile("qq:group-b", "user"), {})
+            self.assertEqual(build_scope_key("qq", "group-a", "user"), "qq:group-a")
+            private_scope = build_scope_key("qq", None, "user")
+            self.assertEqual(private_scope, "qq:private:user")
+            self.assertEqual(store.get_profile(private_scope, "user"), {})
             self.assertEqual(store.get_run("qq:group-a", "user", 1)["seed"], "seed-2")
             self.assertEqual(store.get_run("qq:group-a", "user", 2)["seed"], "seed-1")
             self.assertIsNone(store.get_run("qq:group-a", "user", 3))
+
+            store.save_session(private_scope, "user", {"phase": "talent"})
+            store.delete_user_data("qq:group-a", "user")
+            self.assertEqual(store.get_profile("qq:group-a", "user"), {})
+            self.assertIsNone(store.get_session("qq:group-a", "user"))
+            self.assertIsNone(store.get_run("qq:group-a", "user", 1))
+            self.assertEqual(
+                store.get_session(private_scope, "user"), {"phase": "talent"}
+            )
 
 
 class FormattingTests(unittest.TestCase):

@@ -20,7 +20,7 @@ from .pm_life.formatting import (
     format_talents,
     profile_counts,
 )
-from .pm_life.storage import SQLiteStore
+from .pm_life.storage import SQLiteStore, build_scope_key
 
 
 PLUGIN_NAME = "astrbot_plugin_pm_life_restart"
@@ -29,12 +29,12 @@ PLUGIN_NAME = "astrbot_plugin_pm_life_restart"
 @register(
     PLUGIN_NAME,
     "baihua0716-debug",
-    "在 QQ 群中游玩带群内个人存档的月计人生重开模拟器。",
-    "0.1.1",
+    "在 QQ 群聊或私聊中游玩独立存档的月计人生重开模拟器。",
+    "0.1.2",
     "https://github.com/baihua0716-debug/astrbot_plugin_pm_life_restart",
 )
 class Main(Star):
-    """群内独立存档的 Project Moon 人生重开模拟器。"""
+    """群聊与私聊独立存档的 Project Moon 人生重开模拟器。"""
 
     def __init__(self, context: Context, config: Any | None = None) -> None:
         super().__init__(context)
@@ -53,25 +53,26 @@ class Main(Star):
             "forward_chunk_chars", 2500, 500, 10000
         )
         self._user_locks: dict[tuple[str, str], asyncio.Lock] = {}
-        logger.info("月计人生插件 v0.1.1 已加载，指令：/月计人生")
+        logger.info("月计人生插件 v0.1.2 已加载，指令：/月计人生")
 
     @filter.command("月计人生", alias={"pmlife", "pm人生"})
-    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def monthly_life(self, event: AstrMessageEvent):
         """开始或继续月计人生；发送“/月计人生 帮助”查看玩法。"""
         if getattr(event, "_pm_life_handled", False):
             return
         setattr(event, "_pm_life_handled", True)
         event.stop_event()
-        group_id = event.get_group_id()
         user_id = event.get_sender_id()
-        if not group_id or not user_id:
-            yield event.plain_result("月计人生仅支持 QQ 群聊使用。")
+        if not user_id:
+            yield event.plain_result("无法识别当前 QQ 用户，暂时不能建立存档。")
             event.stop_event()
             return
 
-        group_key = f"{event.get_platform_name() or 'qq'}:{group_id}"
         user_key = str(user_id)
+        group_key = build_scope_key(
+            event.get_platform_name(), event.get_group_id(), user_key
+        )
         lock = self._user_locks.setdefault((group_key, user_key), asyncio.Lock())
         if lock.locked():
             yield event.plain_result("你的上一条月计人生指令仍在处理中，请稍候。")
@@ -89,6 +90,23 @@ class Main(Star):
                     yield event.plain_result(
                         await self._profile_text(group_key, user_key)
                     )
+                elif action in {"删除存档", "删档", "delete"}:
+                    confirmed = (
+                        len(rest) == 1
+                        and rest[0].lower() in {"确认", "confirm"}
+                    )
+                    if not confirmed:
+                        yield event.plain_result(
+                            "⚠️ 这会永久删除当前会话的档案、历史记录和未完成流程。\n"
+                            "如需继续，请发送：/月计人生 删除存档 确认"
+                        )
+                    else:
+                        await asyncio.to_thread(
+                            self.store.delete_user_data, group_key, user_key
+                        )
+                        yield event.plain_result(
+                            "当前会话的月计人生存档已永久删除。"
+                        )
                 elif action in {"记录", "历史", "history"}:
                     position = self._positive_int(rest[0]) if rest else 1
                     run = await asyncio.to_thread(
@@ -145,7 +163,7 @@ class Main(Star):
             finally:
                 event.stop_event()
 
-    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def quick_reply(self, event: AstrMessageEvent):
         """在已开始的流程中直接接收数字，不要求重复输入命令前缀。"""
         message = event.get_message_str().strip()
@@ -169,12 +187,13 @@ class Main(Star):
             except ValueError:
                 return
 
-        group_id = event.get_group_id()
         user_id = event.get_sender_id()
-        if not group_id or not user_id:
+        if not user_id:
             return
-        group_key = f"{event.get_platform_name() or 'qq'}:{group_id}"
         user_key = str(user_id)
+        group_key = build_scope_key(
+            event.get_platform_name(), event.get_group_id(), user_key
+        )
         session = await asyncio.to_thread(
             self.store.get_session, group_key, user_key
         )
@@ -396,12 +415,12 @@ class Main(Star):
         profile = await asyncio.to_thread(self.store.get_profile, group_id, user_id)
         counts = profile_counts(profile)
         return (
-            "📁 本群个人档案\n"
+            "📁 当前会话个人档案\n"
             f"重开次数：{counts['times']}\n"
             f"收集天赋：{counts['talents']}\n"
             f"经历事件：{counts['events']}\n"
             f"解锁成就：{counts['achievements']}\n"
-            "档案仅在当前群生效。"
+            "群聊与私聊档案相互独立。"
         )
 
     def _forward_result(
@@ -493,9 +512,10 @@ class Main(Star):
             "/月计人生 属性 5 5 5 5 —— 分配运气/智力/体质/家境\n"
             "/月计人生 继承 1 —— 继承结局天赋\n"
             "/月计人生 跳过 —— 不继承天赋\n"
-            "/月计人生 档案 —— 查看本群个人档案\n"
+            "/月计人生 档案 —— 查看当前会话个人档案\n"
             "/月计人生 记录 [序号] —— 查看最近人生，1 为最新\n"
-            "/月计人生 放弃 —— 清除未完成步骤\n\n"
+            "/月计人生 放弃 —— 清除未完成步骤\n"
+            "/月计人生 删除存档 确认 —— 永久删除当前会话存档\n\n"
             "游戏使用本地 JavaScript 规则引擎，不调用大模型、不消耗 Token。"
         )
 
