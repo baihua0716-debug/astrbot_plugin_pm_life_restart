@@ -2,7 +2,7 @@ name: astrbot_plugin_pm_life_restart
 display_name: 月计人生重开模拟器
 short_desc: 在 QQ 群中游玩带群内个人存档的月计人生重开模拟器。
 desc: 使用上游 PM-life-restart JavaScript 核心，在 QQ 群中完成天赋选择、属性分配、完整人生推演、成就与继承；游戏过程不调用大模型。
-version: 0.1.0
+version: 0.1.1
 author: baihua0716-debug
 repo: https://github.com/baihua0716-debug/astrbot_plugin_pm_life_restart
 astrbot_version: ">=4.9.2,<5"

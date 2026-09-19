@@ -8,7 +8,7 @@ from typing import Any
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Node, Plain
-from astrbot.api.star import Context, Star
+from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .pm_life.engine_client import EngineClient, EngineError
@@ -26,6 +26,13 @@ from .pm_life.storage import SQLiteStore
 PLUGIN_NAME = "astrbot_plugin_pm_life_restart"
 
 
+@register(
+    PLUGIN_NAME,
+    "baihua0716-debug",
+    "在 QQ 群中游玩带群内个人存档的月计人生重开模拟器。",
+    "0.1.1",
+    "https://github.com/baihua0716-debug/astrbot_plugin_pm_life_restart",
+)
 class Main(Star):
     """群内独立存档的 Project Moon 人生重开模拟器。"""
 
@@ -46,11 +53,15 @@ class Main(Star):
             "forward_chunk_chars", 2500, 500, 10000
         )
         self._user_locks: dict[tuple[str, str], asyncio.Lock] = {}
+        logger.info("月计人生插件 v0.1.1 已加载，指令：/月计人生")
 
-    @filter.command("月计人生")
+    @filter.command("月计人生", alias={"pmlife", "pm人生"})
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def monthly_life(self, event: AstrMessageEvent):
         """开始或继续月计人生；发送“/月计人生 帮助”查看玩法。"""
+        if getattr(event, "_pm_life_handled", False):
+            return
+        setattr(event, "_pm_life_handled", True)
         event.stop_event()
         group_id = event.get_group_id()
         user_id = event.get_sender_id()
@@ -138,7 +149,13 @@ class Main(Star):
     async def quick_reply(self, event: AstrMessageEvent):
         """在已开始的流程中直接接收数字，不要求重复输入命令前缀。"""
         message = event.get_message_str().strip()
-        if not message or "月计人生" in message:
+        if not message:
+            return
+
+        if self._is_command_message(message):
+            if not getattr(event, "_pm_life_handled", False):
+                async for result in self.monthly_life(event):
+                    yield result
             return
 
         normalized = message.replace("，", " ").replace(",", " ")
@@ -413,11 +430,22 @@ class Main(Star):
     @staticmethod
     def _parse_args(event: AstrMessageEvent) -> list[str]:
         message = event.get_message_str().strip()
-        marker = "月计人生"
-        index = message.find(marker)
-        if index < 0:
-            return []
-        return message[index + len(marker) :].strip().split()
+        for marker in ("月计人生", "pmlife", "pm人生"):
+            index = message.lower().find(marker)
+            if index >= 0:
+                return message[index + len(marker) :].strip().split()
+        return []
+
+    @staticmethod
+    def _is_command_message(message: str) -> bool:
+        normalized = message.strip()
+        if normalized.startswith(("/", "／")):
+            normalized = normalized[1:].lstrip()
+        lowered = normalized.lower()
+        return any(
+            lowered == name or lowered.startswith(f"{name} ")
+            for name in ("月计人生", "pmlife", "pm人生")
+        )
 
     @staticmethod
     def _positive_int(value: str) -> int:
@@ -458,6 +486,7 @@ class Main(Star):
         return (
             "🌙 月计人生指令\n"
             "/月计人生 —— 开始或查看当前步骤\n"
+            "如果中文命令未被框架识别，也可发送 /pmlife\n"
             "开局后直接回复数字即可继续，无需重复输入 /月计人生\n"
             "/月计人生 重开 —— 放弃当前步骤并重新抽取\n"
             "/月计人生 天赋 1 2 3 4 —— 选择四个天赋\n"
