@@ -113,6 +113,19 @@ class SQLiteStore:
         value = _load(row["session_json"] if row else None, None)
         return value if isinstance(value, dict) else None
 
+    def get_recent_session(
+        self, group_id: str, user_id: str, max_age_seconds: int
+    ) -> dict[str, Any] | None:
+        cutoff = int(time.time()) - max(0, int(max_age_seconds))
+        with self._lock, self._connection() as db:
+            row = db.execute(
+                "SELECT session_json FROM sessions "
+                "WHERE group_id=? AND user_id=? AND updated_at>=?",
+                (group_id, user_id, cutoff),
+            ).fetchone()
+        value = _load(row["session_json"] if row else None, None)
+        return value if isinstance(value, dict) else None
+
     def save_session(
         self, group_id: str, user_id: str, session: dict[str, Any]
     ) -> None:

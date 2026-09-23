@@ -14,7 +14,13 @@ def format_talents(talents: Iterable[dict[str, Any]]) -> str:
         lines.append(
             f"{talent['index']:>2}. {mark} {talent['name']}：{talent['description']}"
         )
-    lines.extend(["", "直接回复 4 个编号，例如：1 2 3 4"])
+    lines.extend(
+        [
+            "",
+            "回复 4 个编号，例如：1 2 3 4。",
+            "群聊请引用回复 Bot 提示或 @Bot；私聊可直接发送。",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -30,7 +36,8 @@ def format_property_prompt(points: int, selected: Iterable[dict[str, Any]]) -> s
         f"已选择：{names}\n"
         f"请把 {points} 点分配给运气、智力、体质、家境；每项 0～15。\n"
         f"直接回复，例如：{' '.join(map(str, example))}\n"
-        "顺序固定为：运气 智力 体质 家境"
+        "顺序固定为：运气 智力 体质 家境\n"
+        "群聊请引用回复 Bot 提示或 @Bot；私聊可直接发送。"
     )
 
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Node, Plain
+from astrbot.api.message_components import At, Node, Plain, Reply
 from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -30,7 +30,7 @@ PLUGIN_NAME = "astrbot_plugin_pm_life_restart"
     PLUGIN_NAME,
     "baihua0716-debug",
     "在 QQ 群聊或私聊中游玩独立存档的月计人生重开模拟器。",
-    "0.1.3",
+    "0.1.4",
     "https://github.com/baihua0716-debug/astrbot_plugin_pm_life_restart",
 )
 class Main(Star):
@@ -53,7 +53,7 @@ class Main(Star):
             "forward_chunk_chars", 2500, 500, 10000
         )
         self._user_locks: dict[tuple[str, str], asyncio.Lock] = {}
-        logger.info("月计人生插件 v0.1.3 已加载，指令：/月计人生")
+        logger.info("月计人生插件 v0.1.4 已加载，指令：/月计人生")
 
     @filter.command("月计人生", alias={"pmlife", "pm人生"})
     @filter.event_message_type(filter.EventMessageType.ALL)
@@ -170,6 +170,15 @@ class Main(Star):
                     yield result
             return
 
+        if event.get_group_id():
+            if not self._targets_bot(event):
+                return
+            message = " ".join(
+                component.text
+                for component in event.get_messages()
+                if isinstance(component, Plain)
+            ).strip()
+
         normalized = message.replace("，", " ").replace(",", " ")
         values = normalized.split()
         skip = message in {"跳过", "不继承"}
@@ -189,7 +198,7 @@ class Main(Star):
             event.get_platform_name(), event.get_group_id(), user_key
         )
         session = await asyncio.to_thread(
-            self.store.get_session, group_key, user_key
+            self.store.get_recent_session, group_key, user_key, 600
         )
         if not session:
             return
@@ -241,6 +250,10 @@ class Main(Star):
         session = await asyncio.to_thread(self.store.get_session, group_id, user_id)
         if session and not force:
             phase = session.get("phase")
+            if phase in {"talent", "property", "inherit"}:
+                await asyncio.to_thread(
+                    self.store.save_session, group_id, user_id, session
+                )
             if phase == "talent":
                 return format_talents(session.get("talents", []))
             if phase == "property":
@@ -437,7 +450,13 @@ class Main(Star):
         lines = ["请选择一个本局天赋继承到下一局："]
         for index, talent in enumerate(options, 1):
             lines.append(f"{index}. {talent['name']}：{talent['description']}")
-        lines.extend(["", "直接回复编号，例如：1", "不继承请回复：跳过"])
+        lines.extend(
+            [
+                "",
+                "回复编号（例如 1），或回复“跳过”。",
+                "群聊请引用回复 Bot 提示或 @Bot；私聊可直接发送。",
+            ]
+        )
         return "\n".join(lines)
 
     @staticmethod
@@ -459,6 +478,20 @@ class Main(Star):
             lowered == name or lowered.startswith(f"{name} ")
             for name in ("月计人生", "pmlife", "pm人生")
         )
+
+    @staticmethod
+    def _targets_bot(event: AstrMessageEvent) -> bool:
+        bot_id = str(event.get_self_id() or "")
+        if not bot_id:
+            return False
+        for component in event.get_messages():
+            if isinstance(component, At) and str(component.qq) == bot_id:
+                return True
+            if isinstance(component, Reply):
+                replied_sender = component.sender_id or component.qq
+                if str(replied_sender) == bot_id:
+                    return True
+        return False
 
     @staticmethod
     def _positive_int(value: str) -> int:
@@ -500,7 +533,8 @@ class Main(Star):
             "🌙 月计人生指令\n"
             "/月计人生 —— 开始或查看当前步骤\n"
             "如果中文命令未被框架识别，也可发送 /pmlife\n"
-            "开局后直接回复数字即可继续，无需重复输入 /月计人生\n"
+            "群聊请引用回复 Bot 提示或 @Bot 输入数字；私聊可直接回复\n"
+            "快捷回复只在提示后的 10 分钟内有效，超时发 /月计人生 续接\n"
             "/月计人生 重开 —— 放弃当前步骤并重新抽取\n"
             "/月计人生 天赋 1 2 3 4 —— 选择四个天赋\n"
             "/月计人生 属性 5 5 5 5 —— 分配运气/智力/体质/家境\n"

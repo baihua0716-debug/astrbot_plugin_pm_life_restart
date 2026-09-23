@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
+import time
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from pm_life.formatting import chunk_trajectory, profile_counts
@@ -44,6 +47,28 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(
                 store.get_session(private_scope, "user"), {"phase": "talent"}
             )
+
+    def test_recent_session_expires_without_deleting_save(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteStore(Path(directory) / "test.sqlite3")
+            scope = "qq:group-a"
+            user = "user"
+            session = {"phase": "inherit", "options": []}
+            store.save_session(scope, user, session)
+            self.assertEqual(store.get_recent_session(scope, user, 600), session)
+            self.assertIsNone(store.get_recent_session(scope, "other", 600))
+
+            with closing(sqlite3.connect(store.path)) as db:
+                db.execute(
+                    "UPDATE sessions SET updated_at=? WHERE group_id=? AND user_id=?",
+                    (int(time.time()) - 601, scope, user),
+                )
+                db.commit()
+            self.assertIsNone(store.get_recent_session(scope, user, 600))
+            self.assertEqual(store.get_session(scope, user), session)
+
+            store.save_session(scope, user, session)
+            self.assertEqual(store.get_recent_session(scope, user, 600), session)
 
 
 class FormattingTests(unittest.TestCase):
